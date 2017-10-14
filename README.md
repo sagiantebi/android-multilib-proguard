@@ -1,5 +1,7 @@
 # android-multilib-proguard
 
+[![Build Status](https://travis-ci.org/sagiantebi/android-multilib-proguard.svg?branch=master)](https://travis-ci.org/sagiantebi/android-multilib-proguard)
+
 A Gradle plugin which automates the procedures required to apply proguard to multiple android library projects.
 
 ## Features
