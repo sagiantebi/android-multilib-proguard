@@ -1,4 +1,18 @@
+
+buildscript {
+    repositories {
+        jcenter()
+    }
+}
+
+
+plugins {
+    id "com.jfrog.bintray" version "1.7"
+}
+
 apply plugin: 'groovy'
+apply plugin: 'maven'
+apply plugin: 'maven-publish'
 
 repositories {
     jcenter()
@@ -11,13 +25,31 @@ dependencies {
     implementation 'net.sf.proguard:proguard-gradle:5.3.3'
 }
 
+publishing {
+    publications {
+        PluginPublisher(MavenPublication) {
+            groupId project['group']
+            artifactId project['name']
+            version project['version']
+        }
+    }
+}
 
-apply plugin: 'maven'
-
-uploadArchives {
-    repositories {
-        mavenDeployer {
-            repository(url: "file://localhost/home/sagiantebi/tmp/repo/")
+bintray {
+    user = project.hasProperty('bintrayUser') ? project.property('bintrayUser') : System.getenv('BINTRAY_USER')
+    key = project.hasProperty('bintrayApiKey') ? project.property('bintrayApiKey') : System.getenv('BINTRAY_API_KEY')
+    configurations = ['archives']
+    pkg {
+        repo = 'mvn'
+        name = project['name']
+        userOrg = user
+        licenses = ['MIT']
+        vcsUrl = 'https://github.com/sagiantebi/android-multilib-proguard'
+        version {
+            name = project['version']
+            desc = 'Initial release'
+            vcsTag = '0.9'
+            attributes = ['gradle-plugin': 'com.sagiantebi:android-multilib-proguard:0.9']
         }
     }
 }
