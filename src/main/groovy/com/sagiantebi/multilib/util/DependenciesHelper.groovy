@@ -25,13 +25,21 @@
 
 package com.sagiantebi.multilib.util
 
+import com.android.build.gradle.BaseExtension
 import com.android.build.gradle.LibraryExtension
 import com.android.build.gradle.api.AndroidSourceSet
+import com.android.build.gradle.internal.dependency.AndroidTypeAttr
+import com.android.build.gradle.internal.dependency.VariantAttr
+import com.android.builder.core.AndroidBuilder
 import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.Project
-import org.gradle.api.artifacts.Configuration
-import org.gradle.api.artifacts.ResolvedArtifact
-import org.gradle.api.artifacts.ResolvedDependency;
+import org.gradle.api.artifacts.*
+import org.gradle.api.attributes.AttributeContainer
+import org.gradle.api.attributes.Usage
+import org.gradle.api.internal.artifacts.dependencies.DefaultSelfResolvingDependency
+import org.gradle.api.model.ObjectFactory
+
+import java.lang.reflect.Field
 
 /**
  * Gathers utility methods for finding dependencies in a project
@@ -39,12 +47,26 @@ import org.gradle.api.artifacts.ResolvedDependency;
 
 public class DependenciesHelper {
 
+    private static KEY_COMPILE_ONLY = "compileOnly"
+    private static KEY_IMPL = "impl"
+    private static KEY_API= "api"
+    private static KEY_RUNTIME = "runtime"
+
+    private static KEY_OLD_COMPILE = "compile"
+    private static KEY_OLD_PROVIDED = "provided"
+
+    private Project project;
+
+    public DependenciesHelper(Project project) {
+        this.project = project
+    }
+
     /**
      * Finds the android jar, so ProGuard can reference correctly.
      * @param collectedVariantDataList the list of collected variant data
      * @return a File referencing the Android jar (or bootpath)
      */
-    public static File findAndroidJar(List<VariantDataCollector.CollectedVariantData> collectedVariantDataList) {
+    public File findAndroidJar(List<VariantDataCollector.CollectedVariantData> collectedVariantDataList) {
         //we might have multiple paths, find the first and warn about different APIs
         HashSet<File> bootPaths = new HashSet<>()
         collectedVariantDataList.each { VariantDataCollector.CollectedVariantData info ->
@@ -64,14 +86,34 @@ public class DependenciesHelper {
      * @param localInclusiveModules the target projects
      * @return  a list of Files, referencing the provided libraries.
      */
-    public static List<File> findResolvedProvidedDependencies(VariantDataCollector.CollectedVariantData collectedVariantData, List<String> localInclusiveModules) {
-        RelevantConfigurationInvoker invoker = new RelevantConfigurationInvoker() {
-            @Override
-            Configuration getCorrectConfigurationName(Project project, AndroidSourceSet set) {
-                return project.configurations.getByName(set.providedConfigurationName)
+    public List<File> findResolvedProvidedDependencies(VariantDataCollector.CollectedVariantData collectedVariantData, List<String> localInclusiveModules) {
+        List<File> output = new ArrayList<>()
+        output.addAll(findResolvedDependencies(collectedVariantData, localInclusiveModules, invokerFor(KEY_COMPILE_ONLY)));
+        output.addAll(findResolvedDependencies(collectedVariantData, localInclusiveModules, invokerFor(KEY_RUNTIME)));
+        output.addAll(findResolvedDependencies(collectedVariantData, localInclusiveModules, invokerFor(KEY_OLD_PROVIDED)));
+
+        //there are also libraries added by android as 'provided' / 'runtime' during building, eg. org.apache.http.legacy
+        //this is an extremely dirty solution, but I havn't found any easier means.
+        AndroidBuilder builder = null;
+        try {
+            Field field = BaseExtension.class.getDeclaredField("androidBuilder")
+            if (field != null) {
+                field.setAccessible(true)
+                builder = field.get(collectedVariantData.androidExtension)
+            }
+        } catch (Throwable t) {
+
+        }
+        if (builder != null) {
+            List<File> extras = builder.getBootClasspath(true)
+            extras.each { f ->
+                if (!f.name.equals("android.jar")) {
+                    project.logger.debug("adding ${f} from builder.getBootClasspath()")
+                    output.add(f)
+                }
             }
         }
-        return findResolvedDependencies(collectedVariantData, localInclusiveModules, invoker)
+        return output;
     }
 
     /**
@@ -80,14 +122,41 @@ public class DependenciesHelper {
      * @param localInclusiveModules the target projects
      * @return  a list of Files, referencing the compiled libraries.
      */
-    public static List<File> findResolvedCompiledDependencies(VariantDataCollector.CollectedVariantData collectedVariantData, List<String> localInclusiveModules) {
+    public List<File> findResolvedCompiledDependencies(VariantDataCollector.CollectedVariantData collectedVariantData, List<String> localInclusiveModules) {
+        List<File> output = new ArrayList<>()
+        output.addAll(findResolvedDependencies(collectedVariantData, localInclusiveModules, invokerFor(KEY_API)));
+        output.addAll(findResolvedDependencies(collectedVariantData, localInclusiveModules, invokerFor(KEY_IMPL)));
+        output.addAll(findResolvedDependencies(collectedVariantData, localInclusiveModules, invokerFor(KEY_OLD_COMPILE)));
+        return output;
+    }
+
+    /**
+     * Helper function to return RelevantConfigurationInvoker
+     * @param name the configuration name we need.
+     * @return
+     */
+    private RelevantConfigurationInvoker invokerFor(final String name) {
         RelevantConfigurationInvoker invoker = new RelevantConfigurationInvoker() {
             @Override
             Configuration getCorrectConfigurationName(Project project, AndroidSourceSet set) {
-                return project.configurations.getByName(set.compileConfigurationName)
+                String value = set.getImplementationConfigurationName()
+                if (name.equals(KEY_API)) {
+                    value = set.getApiConfigurationName()
+                } else if (name.equals(KEY_RUNTIME)) {
+                    value = set.getRuntimeOnlyConfigurationName()
+                } else if (name.equals(KEY_COMPILE_ONLY)) {
+                    value = set.getCompileOnlyConfigurationName()
+                } else if (name.equals(KEY_OLD_PROVIDED)) {
+                    value = set.providedConfigurationName
+                } else if (name.equals(KEY_OLD_COMPILE)) {
+                    value = set.compileConfigurationName
+                } else if (!name.equals(KEY_IMPL)){
+                    project.getLogger().warn("couldn't find configuration for ${name}, defaulting to 'imp.'")
+                }
+                return project.configurations.getByName(value)
             }
         }
-        return findResolvedDependencies(collectedVariantData, localInclusiveModules, invoker)
+        return invoker
     }
 
     /**
@@ -96,7 +165,7 @@ public class DependenciesHelper {
      * @param localInclusiveModules a list of modules which should not be included. this is to avoid cluttering the configuration.</br> the format for this list is group:name:version
      * @param configInvoker a utility interface to match the correct configuration. useful for reuse of this code.
      */
-    public static List<File> findResolvedDependencies(VariantDataCollector.CollectedVariantData collectedVariantData, List<String> localInclusiveModules, RelevantConfigurationInvoker configInvoker) {
+    public List<File> findResolvedDependencies(VariantDataCollector.CollectedVariantData collectedVariantData, List<String> localInclusiveModules, RelevantConfigurationInvoker configInvoker) {
         List<File> out = new ArrayList<>()
 
         //TODO modify this  to be more dynamic, eg. from project.compile.
@@ -122,12 +191,47 @@ public class DependenciesHelper {
 
         //iterate and find provided artifcats.
         relevantSourceSets.each { AndroidSourceSet set ->
+
             Configuration configuration = configInvoker.getCorrectConfigurationName(collectedVariantData.project, set)
-            Set<ResolvedDependency> dependencies = configuration.resolvedConfiguration.firstLevelModuleDependencies
-            dependencies.each {ResolvedDependency d ->
+            Set<ResolvedDependency> dependencies;
+            if (configuration.canBeResolved) {
+                dependencies = configuration.resolvedConfiguration.firstLevelModuleDependencies
+            } else {
+                def name = "${collectedVariantData.project.name}-${collectedVariantData.androidVariant.name}-${set.name}-${configuration.name}-depHelper"
+                boolean hasConfig = true;
+                try { collectedVariantData.project.configurations.getByName(name) } catch (UnknownConfigurationException ignored) {hasConfig = false}
+                if (!hasConfig) {
+                    def temp = collectedVariantData.project.configurations.create(name)
+                    AttributeContainer container = temp.getAttributes()
+
+                    ObjectFactory factory = project.getObjects();
+                    VariantAttr variantNameAttr = factory.named(VariantAttr.class, collectedVariantData.androidVariant.name);
+                    final Usage apiUsage = factory.named(Usage.class, Usage.JAVA_API);
+
+                    container.attribute(VariantAttr.ATTRIBUTE, variantNameAttr);
+                    container.attribute(Usage.USAGE_ATTRIBUTE, apiUsage);
+                    container.attribute(AndroidTypeAttr.ATTRIBUTE, factory.named(AndroidTypeAttr.class, AndroidTypeAttr.AAR));
+
+                    configuration.allDependencies.each { d->
+                        temp.dependencies.add(d)
+                    }
+                    temp.setDescription("Dependency helper for " + collectedVariantData.androidVariant.name);
+                    temp.getResolutionStrategy().sortArtifacts(ResolutionStrategy.SortOrder.CONSUMER_FIRST);
+                    dependencies = temp.resolvedConfiguration.firstLevelModuleDependencies
+                    configuration.dependencies.each {d ->
+                        project.logger.debug("found dependency - ${d}")
+                        if (d instanceof DefaultSelfResolvingDependency) {
+                            DefaultSelfResolvingDependency selfResolvingDependency = d;
+                            project.logger.debug("got a self resolving dependecy - ${selfResolvingDependency.files.files}")
+                            out.addAll(selfResolvingDependency.files.files)
+                        }
+                    }
+                }
+            }
+            dependencies.each { ResolvedDependency d ->
                 if (!isInclusive(localInclusiveModules, d)) {
                     Set<ResolvedArtifact> artifacts = d.allModuleArtifacts
-                    artifacts.each {ResolvedArtifact ar ->
+                    artifacts.each { ResolvedArtifact ar ->
                         out.add(ar.file)
                     }
                 }
@@ -141,7 +245,7 @@ public class DependenciesHelper {
      * @param variantCollectedData the collected data for this project.
      * @return a list of Files, referencing the provided libraries.
      */
-    public static List<File> findLibraryJars(List<VariantDataCollector.CollectedVariantData> variantCollectedData) {
+    public List<File> findLibraryJars(List<VariantDataCollector.CollectedVariantData> variantCollectedData) {
         final List<String> includedProjects = new ArrayList<>()
         variantCollectedData.each {info ->
             def str = "${info.project.group}:${info.project.name}:${info.project.version}"
@@ -160,7 +264,7 @@ public class DependenciesHelper {
      * @param variantCollectedData  the collected data for the projects
      * @return a list of Files, referencing the compiled libraries.
      */
-    public static List<File> findCompiledAars(List<VariantDataCollector.CollectedVariantData> variantCollectedData) {
+    public List<File> findCompiledAars(List<VariantDataCollector.CollectedVariantData> variantCollectedData) {
         final List<String> includedProjects = new ArrayList<>()
         variantCollectedData.each {info ->
             def str = "${info.project.group}:${info.project.name}:${info.project.version}"
@@ -187,7 +291,7 @@ public class DependenciesHelper {
      * @param resolvedDependency the depedency we might want to avoid
      * @return true if this ResolvedDependency is a target project, false otherwise
      */
-    private static boolean isInclusive(List<String> inclusives, ResolvedDependency resolvedDependency) {
+    private boolean isInclusive(List<String> inclusives, ResolvedDependency resolvedDependency) {
         return inclusives.contains("${resolvedDependency.moduleGroup}:${resolvedDependency.moduleName}:${resolvedDependency.moduleVersion}")
     }
 

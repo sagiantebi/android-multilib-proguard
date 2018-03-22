@@ -25,14 +25,17 @@
 
 package com.sagiantebi.multilib.tasks
 
-import com.sagiantebi.multilib.util.DependenciesHelper;
-import com.sagiantebi.multilib.util.VariantDataCollector;
-
-import org.gradle.api.Project;
+import com.android.build.gradle.api.AndroidSourceSet
+import com.sagiantebi.multilib.AndroidMultiLibProguardExtension
+import com.sagiantebi.multilib.util.DependenciesHelper
+import com.sagiantebi.multilib.util.VariantDataCollector
+import org.gradle.api.NamedDomainObjectContainer
+import org.gradle.api.Project
 import org.gradle.api.Task
+import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.file.FileCollection
 import org.gradle.api.internal.file.collections.LazilyInitializedFileCollection
-import org.gradle.api.internal.file.collections.SimpleFileCollection;
+import org.gradle.api.internal.file.collections.SimpleFileCollection
 import org.gradle.api.tasks.Copy
 import proguard.gradle.ProGuardTask
 
@@ -64,10 +67,12 @@ public class SimpleTasksCreator {
 
     private final Project project
     private final File workingDirectory
+    private DependenciesHelper dependencyHelper
 
     public SimpleTasksCreator(Project project, File workingDirectory) {
         this.project = project
         this.workingDirectory = workingDirectory
+        this.dependencyHelper = new DependenciesHelper(project)
     }
 
     /**
@@ -102,23 +107,28 @@ public class SimpleTasksCreator {
         }
 
         if (buildToolsVersion != null && sdkDir != null) {
-            String aapt = "${sdkDir.absolutePath}/build-tools/${buildToolsVersion}/aapt" //should work on both *nix and win ?
+            String aapt = "${sdkDir.absolutePath}/build-tools/${buildToolsVersion}/aapt"
+            //should work on both *nix and win ?
             File targetDir = new File(workingDirectory, AAR_CONSUMED_CONFIGURATIONS)
-            runAapt.doLast {
-                if (!targetDir.exists()) {
-                    targetDir.mkdir()
-                }
-                collectedData.each { VariantDataCollector.CollectedVariantData data ->
-                    File targetFile = new File(targetDir, "${data.outputFile.getName().replace(".aar", ".pro")}")
+
+            if (!targetDir.exists()) {
+                targetDir.mkdir()
+            }
+            collectedData.each { VariantDataCollector.CollectedVariantData data ->
+                File targetFile = new File(targetDir, "${data.outputFile.getName().replace(".aar", ".pro")}")
+                List<String> arguments = ["package",
+                                          "-f",
+                                          "--no-crunch",
+                                          "-I", "${data.androidExtension.bootClasspath.first().absolutePath}",
+                                          "-M", "${data.androidVariant.outputs.first().processManifest.manifestOutputDirectory}/AndroidManifest.xml",
+                                          "-S", "${data.androidVariant.outputs.first().processResources.getInputResourcesDir().getSingleFile().absolutePath}",
+                                          "-G", "${targetFile.absolutePath}"]
+                addResourceDirectoriesToAaptArguments(arguments, data, runAapt)
+                runAapt.doLast {
+                    project.logger.debug("aapt invokation - aapt ${arguments.join(" ")}")
                     project.exec {
                         commandLine aapt
-                        args ("package",
-                                "-f",
-                                "--no-crunch",
-                                "-I","${data.androidExtension.bootClasspath.first().absolutePath}",
-                                "-M","${data.androidVariant.outputs.first().processManifest.manifestOutputFile.absolutePath}",
-                                "-S","${data.androidVariant.outputs.first().processResources.resDir.absolutePath}",
-                                "-G","${targetFile.absolutePath}")
+                        args arguments
                     }
                 }
             }
@@ -126,6 +136,72 @@ public class SimpleTasksCreator {
             project.getLogger().warn("could not detect any android build tools version or the android SDK directory, will not run aapt")
         }
         return runAapt
+    }
+
+    /**
+     * Add additional resource directories from dependencies. currently only finds projects.
+     * @param args the aapt arguments we can modify
+     * @param data the variant collected data
+     * @param runAapt the task itself, so we can add task dependencies
+     */
+
+    private void addResourceDirectoriesToAaptArguments(List<String> args, VariantDataCollector.CollectedVariantData data, Task runAapt) {
+        List<String> depResDirs = new ArrayList<>()
+        List<Task> depResProcessTasks = new ArrayList<>()
+
+        List<AndroidSourceSet> relevantSourceSets = new ArrayList<>()
+        NamedDomainObjectContainer<AndroidSourceSet> sourceSets = data.androidExtension.sourceSets
+        AndroidSourceSet main = sourceSets.getByName("main")
+        if (!data.androidVariant.buildType.name.equals("release")) {
+            AndroidSourceSet debug = sourceSets.getByName("main")
+            relevantSourceSets.add(debug)
+        }
+        relevantSourceSets.add(main)
+
+        //flavor deps
+        if (data.androidVariant.flavorName != null && !data.androidVariant.flavorName.isEmpty()) {
+            AndroidSourceSet flavor = sourceSets.getByName(data.androidVariant.flavorName)
+            relevantSourceSets.add(flavor)
+        }
+        //get the variant deps
+        AndroidSourceSet variantSourceSet = sourceSets.getByName(data.androidVariant.name)
+        relevantSourceSets.add(variantSourceSet)
+
+        relevantSourceSets.each { AndroidSourceSet set ->
+            Collection<String> possibleConfigurations = new ArrayList<>()
+            possibleConfigurations.add(set.implementationConfigurationName)
+            possibleConfigurations.add(set.compileConfigurationName)
+            possibleConfigurations.add(set.providedConfigurationName)
+            possibleConfigurations.add(set.apiConfigurationName)
+            possibleConfigurations.add(set.runtimeOnlyConfigurationName)
+            possibleConfigurations.add(set.compileOnlyConfigurationName)
+
+            possibleConfigurations.each { configName ->
+                def configuration = data.project.configurations.getByName(configName)
+                configuration.dependencies.each { d ->
+                    if (d instanceof ProjectDependency) {
+                        ProjectDependency projectDependency = d;
+                        def otherProject = projectDependency.getDependencyProject();
+                        AndroidMultiLibProguardExtension.WrappedProject wp = new AndroidMultiLibProguardExtension.WrappedProject(otherProject, new AndroidMultiLibProguardExtension.ProjectOptions())
+                        def otherDep = VariantDataCollector.resolveAllTargets(Collections.singletonList(wp))
+                        if (otherDep.size() > 0) {
+                            def resDir = otherDep.first().androidVariant.outputs.first().processResources.getInputResourcesDir().getSingleFile().absolutePath
+                            def resTask = otherDep.first().androidVariant.outputs.first().processResources
+                            depResDirs.add(resDir)
+                            depResProcessTasks.add(resTask)
+                        }
+                    }
+                }
+            }
+        }
+        if (depResDirs.size() > 0) {
+            depResDirs.each { s->
+                args.add("-S")
+                args.add(s)
+            }
+            args.add("--auto-add-overlay")
+            runAapt.dependsOn(depResProcessTasks)
+        }
     }
 
     /**
@@ -138,7 +214,7 @@ public class SimpleTasksCreator {
 
         Task dep = createGenerateAndroidAptProguard(collectedData)
 
-        List<File> aars = DependenciesHelper.findCompiledAars(collectedData)
+        List<File> aars = dependencyHelper.findCompiledAars(collectedData)
         task.inputAARs.addAll(aars)
         task.workingDirectory = new File(workingDirectory, AAR_CONSUMED_CONFIGURATIONS)
         task.description "Collects all the proguard configuration files from compiled AARs"
@@ -168,10 +244,10 @@ public class SimpleTasksCreator {
         configureProguardTaskLibraryJars(proGuardTask, collectedVariantDatas)
         configureProguardTaskConfigurationFiles(proGuardTask)
         configureProguardTaskOutputs(proGuardTask, new File(workingDirectory, PROGUARD_OUTPUTS_DEST))
-        println "proguard task - ${proGuardTask}"
-        println "proguard libjars - ${proGuardTask.getLibraryJarFiles()}"
-        println "proguard injars - ${proGuardTask.getInJarFiles()}"
-        println "proguard configs - ${proGuardTask.getConfigurationFiles()}"
+        project.logger.debug("proguard task - ${proGuardTask}")
+        project.logger.debug("proguard libjars - ${proGuardTask.getLibraryJarFiles()}")
+        project.logger.debug("proguard injars - ${proGuardTask.getInJarFiles()}")
+        project.logger.debug("proguard configs - ${proGuardTask.getConfigurationFiles()}")
         return proGuardTask
     }
 
@@ -195,9 +271,10 @@ public class SimpleTasksCreator {
             FileCollection createDelegate() {
                 File f = new File(workingDirectory, AAR_CONSUMED_CONFIGURATIONS);
                 File[] list = f.listFiles()
-                if (list == null) {
+                if (list == null || list.length == 0) {
                     return null
                 }
+                project.logger.debug("configureProguardTaskConfigurationFiles, returning the following list of files - ${list}")
                 return new SimpleFileCollection(list)
             }
 
@@ -209,17 +286,17 @@ public class SimpleTasksCreator {
         task.configuration(collection)
 
         if (this.project.androidMultilibProguard.getAndroidProguardFileName() != null) {
-            com.android.build.gradle.ProguardFiles.extractBundledProguardFiles(project)
-            File androidPro  = com.android.build.gradle.ProguardFiles.getDefaultProguardFile(this.project.androidMultilibProguard.getAndroidProguardFileName(), project)
-            task.configuration(androidPro)
+            def internalandroidProguardFile = new File(workingDirectory, "proguard-android-optimize.txt");
+            com.android.build.gradle.ProguardFiles.createProguardFile("proguard-android-optimize.txt", internalandroidProguardFile)
+            task.configuration(internalandroidProguardFile)
         }
     }
 
     private void configureProguardTaskLibraryJars(ProGuardTask task, List<VariantDataCollector.CollectedVariantData> collectedVariantDatas) {
         List<File> libraryJars = new ArrayList<>()
-        libraryJars.addAll(DependenciesHelper.findLibraryJars(collectedVariantDatas))
-        libraryJars.add(DependenciesHelper.findAndroidJar(collectedVariantDatas))
-        libraryJars.addAll(DependenciesHelper.findCompiledAars(collectedVariantDatas))
+        libraryJars.addAll(dependencyHelper.findLibraryJars(collectedVariantDatas))
+        libraryJars.add(dependencyHelper.findAndroidJar(collectedVariantDatas))
+        libraryJars.addAll(dependencyHelper.findCompiledAars(collectedVariantDatas))
         task.libraryjars(libraryJars)
     }
 
@@ -233,7 +310,6 @@ public class SimpleTasksCreator {
         task.printconfiguration(new File(directory, "config.txt"))
         task.printseeds(new File(directory, "seeds.txt"))
         task.printusage(new File(directory, "usage.txt"))
-
     }
 
 

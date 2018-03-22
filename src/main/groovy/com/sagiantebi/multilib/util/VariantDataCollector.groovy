@@ -42,7 +42,7 @@ public class VariantDataCollector {
      * @param wrappedProjectList a list of projects
      * @return a list of CollectedVariantData for the target projects.
      */
-    public static List<CollectedVariantData> resolveAllTargets(List<Project> wrappedProjectList) {
+    public static List<CollectedVariantData> resolveAllTargets(List<AndroidMultiLibProguardExtension.WrappedProject> wrappedProjectList) {
         final List<CollectedVariantData> collectedData = new ArrayList<>()
         wrappedProjectList.each { AndroidMultiLibProguardExtension.WrappedProject target ->
             Project prj = target.getTargetProject()

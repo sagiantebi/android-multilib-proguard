@@ -1,10 +1,8 @@
-
 buildscript {
     repositories {
         jcenter()
     }
 }
-
 
 plugins {
     id "com.jfrog.bintray" version "1.7"
@@ -16,12 +14,13 @@ apply plugin: 'maven-publish'
 
 repositories {
     jcenter()
+    google()
 }
 
 dependencies {
     compile gradleApi()
     compile localGroovy()
-    implementation 'com.android.tools.build:gradle:2.3.3'
+    implementation 'com.android.tools.build:gradle:3.0.1'
     implementation 'net.sf.proguard:proguard-gradle:5.3.3'
 }
 
@@ -31,9 +30,13 @@ publishing {
             groupId project['group']
             artifactId project['name']
             version project['version']
+            from components.java
         }
     }
 }
+
+
+
 
 bintray {
     user = project.hasProperty('bintrayUser') ? project.property('bintrayUser') : System.getenv('BINTRAY_USER')
@@ -47,9 +50,9 @@ bintray {
         vcsUrl = 'https://github.com/sagiantebi/android-multilib-proguard'
         version {
             name = project['version']
-            desc = 'Initial release'
-            vcsTag = '0.9'
-            attributes = ['gradle-plugin': 'com.sagiantebi:android-multilib-proguard:0.9']
+            desc = 'Support for android plugin 3.x / Gradle 3.5+'
+            vcsTag = '0.9.5'
+            attributes = ['gradle-plugin': "com.sagiantebi:android-multilib-proguard:${project['version']}"]
         }
     }
 }

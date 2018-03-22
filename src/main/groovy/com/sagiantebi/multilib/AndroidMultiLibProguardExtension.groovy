@@ -69,7 +69,9 @@ class AndroidMultiLibProguardExtension {
     public ProjectOptions addProject(Project project) {
         ProjectOptions options = new ProjectOptions()
         this.targets << new WrappedProject(project, options)
-        this.project.evaluationDependsOn(project.name)
+        if (this.project != project) {
+            this.project.evaluationDependsOn(project.path)
+        }
         return options
 
     }
@@ -78,7 +80,9 @@ class AndroidMultiLibProguardExtension {
         ProjectOptions options = new ProjectOptions()
         project.configure(options, closure)
         this.targets << new WrappedProject(project, options)
-        this.project.evaluationDependsOn(project.name)
+        if (this.project != project) {
+            this.project.evaluationDependsOn(project.path)
+        }
         return options
     }
 
