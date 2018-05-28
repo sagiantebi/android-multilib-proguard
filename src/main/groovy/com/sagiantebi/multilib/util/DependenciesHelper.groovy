@@ -25,11 +25,11 @@
 
 package com.sagiantebi.multilib.util
 
+import com.android.build.api.attributes.VariantAttr
 import com.android.build.gradle.BaseExtension
 import com.android.build.gradle.LibraryExtension
 import com.android.build.gradle.api.AndroidSourceSet
 import com.android.build.gradle.internal.dependency.AndroidTypeAttr
-import com.android.build.gradle.internal.dependency.VariantAttr
 import com.android.builder.core.AndroidBuilder
 import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.Project

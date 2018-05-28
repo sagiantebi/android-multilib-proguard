@@ -44,7 +44,6 @@ class AndroidMultiLibProguardExtension {
      */
     private String androidProguardFileName = null;
 
-
     AndroidMultiLibProguardExtension(Project project) {
         this.project = project
     }

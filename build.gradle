@@ -20,7 +20,7 @@ repositories {
 dependencies {
     compile gradleApi()
     compile localGroovy()
-    implementation 'com.android.tools.build:gradle:3.0.1'
+    implementation 'com.android.tools.build:gradle:3.1.2'
     implementation 'net.sf.proguard:proguard-gradle:5.3.3'
 }
 
@@ -51,7 +51,7 @@ bintray {
         version {
             name = project['version']
             desc = 'Support for android plugin 3.x / Gradle 3.5+'
-            vcsTag = '0.9.5'
+            vcsTag = "${project['version']}" //assume version is git-tagged.
             attributes = ['gradle-plugin': "com.sagiantebi:android-multilib-proguard:${project['version']}"]
         }
     }
