@@ -77,7 +77,9 @@ public class DependenciesHelper {
         if (bootPaths.size() > 1) {
             collectedVariantDataList.first().project.getLogger().warn("WARNING - multiple Android SDK Versions detected. It is recommended that all libraries target the same Android SDK version when using this plugin.")
         }
-        return bootPaths.size() == 0 ? null : bootPaths.first()
+        File bootPath = bootPaths.size() == 0 ? null : bootPaths.find { f -> f.getName().equals("android.jar") }
+        project.getLogger().debug("findAndroidJar returning bootPath {}", bootPath)
+        return bootPath
     }
 
     /**
