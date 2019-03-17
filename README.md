@@ -46,3 +46,5 @@ Currently the plugin can't handle any custom gradle configurations, and only kno
 ## License
 
 MIT
+
+newline
