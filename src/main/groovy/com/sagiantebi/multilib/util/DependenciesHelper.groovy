@@ -228,6 +228,7 @@ public class DependenciesHelper {
                             out.addAll(selfResolvingDependency.files.files)
                         }
                     }
+                    collectedVariantData.project.configurations.remove(temp)
                 }
             }
             dependencies.each { ResolvedDependency d ->
