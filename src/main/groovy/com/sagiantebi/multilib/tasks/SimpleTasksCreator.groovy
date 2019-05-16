@@ -27,13 +27,11 @@ package com.sagiantebi.multilib.tasks
 
 import com.android.build.gradle.api.AndroidSourceSet
 import com.android.build.gradle.internal.res.GenerateLibraryRFileTask
-import com.android.build.gradle.internal.scope.ExistingBuildElements
 import com.android.build.gradle.internal.scope.InternalArtifactType
 import com.google.gson.Gson
 import com.sagiantebi.multilib.AndroidMultiLibProguardExtension
 import com.sagiantebi.multilib.util.DependenciesHelper
 import com.sagiantebi.multilib.util.VariantDataCollector
-import com.sagiantebi.proguard.fork.gradle.ProGuardTask
 import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.Project
 import org.gradle.api.Task
@@ -42,6 +40,7 @@ import org.gradle.api.file.FileCollection
 import org.gradle.api.internal.file.collections.LazilyInitializedFileCollection
 import org.gradle.api.tasks.Copy
 import org.json.simple.JSONObject
+import proguard.gradle.ProGuardTask
 
 import static com.android.build.gradle.internal.scope.InternalArtifactType.LIBRARY_MANIFEST
 
