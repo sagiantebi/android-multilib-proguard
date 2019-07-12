@@ -30,6 +30,7 @@ import com.android.build.gradle.BaseExtension
 import com.android.build.gradle.LibraryExtension
 import com.android.build.gradle.api.AndroidSourceSet
 import com.android.build.gradle.internal.dependency.AndroidTypeAttr
+import com.android.build.gradle.internal.scope.GlobalScope
 import com.android.builder.core.AndroidBuilder
 import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.Project
@@ -97,11 +98,23 @@ public class DependenciesHelper {
         //there are also libraries added by android as 'provided' / 'runtime' during building, eg. org.apache.http.legacy
         //this is an extremely dirty solution, but I havn't found any easier means.
         AndroidBuilder builder = null;
+        GlobalScope globalScope = null;
         try {
-            Field field = BaseExtension.class.getDeclaredField("androidBuilder")
-            if (field != null) {
-                field.setAccessible(true)
-                builder = field.get(collectedVariantData.androidExtension)
+
+            Field gField = BaseExtension.class.getDeclaredField("globalScope")
+            if (gField != null) {
+                gField.setAccessible(true)
+                globalScope = gField.get(collectedVariantData.androidExtension)
+                builder = globalScope.getAndroidBuilder()
+            }
+
+            if (builder == null) {
+                //pre 3.4
+                Field field = BaseExtension.class.getDeclaredField("androidBuilder")
+                if (field != null) {
+                    field.setAccessible(true)
+                    builder = field.get(collectedVariantData.androidExtension)
+                }
             }
         } catch (Throwable t) {
 

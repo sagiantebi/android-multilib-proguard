@@ -26,6 +26,7 @@ dependencies {
     implementation 'net.sf.proguard:proguard-gradle:5.3.3'
     implementation 'com.android.tools.build:gradle:3.4.0'
     implementation 'com.google.code.gson:gson:2.8.4'
+    implementation "org.pantsbuild:jarjar:1.7.2"
 }
 
 publishing {

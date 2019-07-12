@@ -77,8 +77,9 @@ public class VariantDataCollector {
         }
         if (libraryVariants.size() > 0) {
             LibraryVariant matched = libraryVariants[0]
-            File artifactOutput = matched.outputs[0].outputFile
-            Task assemble = matched.assemble
+            File artifactOutput = new File(matched.packageLibraryProvider.getOrNull().destinationDirectory.getOrNull().asFile, matched.packageLibraryProvider.getOrNull().archiveFileName.getOrNull())
+            Task assemble = matched.assembleProvider.get()
+            project.logger.debug(project.path + " : target library - " + artifactOutput)
             if (artifactOutput != null && assemble != null) {
                 info = new CollectedVariantData(artifactOutput, assemble, matched, extension, project)
             }

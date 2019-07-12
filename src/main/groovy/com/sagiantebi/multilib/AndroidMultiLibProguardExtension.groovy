@@ -44,6 +44,17 @@ class AndroidMultiLibProguardExtension {
      */
     private String androidProguardFileName = null;
 
+    /**
+     * If set to true, will attempt to create a single library from the input projects
+     */
+    private boolean singleFileMode = false;
+
+    /**
+     * If {@ref singleFileMode} is set to true, this must contain the target packagename for the final library.<br/>
+     * This will also help us find the main manifest which will be used for the manifest merger.
+     */
+    private String singleFileFinalPackageName;
+
     AndroidMultiLibProguardExtension(Project project) {
         this.project = project
     }
@@ -58,12 +69,27 @@ class AndroidMultiLibProguardExtension {
         }
     }
 
+    public boolean isSingleFileMode() {
+        return singleFileMode
+    }
+
+    public void setSingleFileMode(boolean singleFileMode) {
+        this.singleFileMode = singleFileMode
+    }
+
+    String getSingleFileFinalPackageName() {
+        return singleFileFinalPackageName
+    }
+
+    void setSingleFileFinalPackageName(String singleFileFinalPackageName) {
+        this.singleFileFinalPackageName = singleFileFinalPackageName
+    }
+
     List<WrappedProject> getTargets() {
         return targets
     }
+
     private List<WrappedProject> targets = new ArrayList<>()
-
-
 
     public ProjectOptions addProject(Project project) {
         ProjectOptions options = new ProjectOptions()

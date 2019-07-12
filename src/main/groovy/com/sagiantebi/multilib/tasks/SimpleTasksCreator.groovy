@@ -123,7 +123,6 @@ public class SimpleTasksCreator {
                 File targetFile = new File(targetDir, "${data.outputFile.getName().replace(".aar", ".pro")}")
 
                 GenerateLibraryRFileTask task = data.androidVariant.outputs.first().processResourcesProvider.get()
-                project.logger.warn("aapt invokation - aapt ${task.manifestFiles.get()}")
                 def manifest = task.getManifestFile()
 
                 List<String> arguments = ["package",
@@ -258,18 +257,15 @@ public class SimpleTasksCreator {
      * @param collectedVariantDatas
      * @return
      */
-    public Task createProguardTask(String filePath, List<VariantDataCollector.CollectedVariantData> collectedVariantDatas) {
+    public ProGuardTask createProguardTask(String filePath, List<VariantDataCollector.CollectedVariantData> collectedVariantDatas, File out) {
         ProGuardTask proGuardTask = project.tasks.create("proguardMultiLib", ProGuardTask)
-        File output = new File(workingDirectory, PROGUARD_DEST_LIBS)
+        File output = out == null ? new File(workingDirectory, PROGUARD_DEST_LIBS) : out
         configureProguardTaskOutput(proGuardTask, output);
 
         proGuardTask.description "Runs proguard on the input libraries and outputs obsfucated libraries to ${output}"
 
         proGuardTask.injars(filePath)
         proGuardTask.outjars(output.getAbsolutePath())
-
-        proGuardTask.keep('class **.R')
-        proGuardTask.keep('class **.R$*')
 
         configureProguardTaskLibraryJars(proGuardTask, collectedVariantDatas)
         configureProguardTaskConfigurationFiles(proGuardTask)
@@ -318,7 +314,9 @@ public class SimpleTasksCreator {
 
         if (this.project.androidMultilibProguard.getAndroidProguardFileName() != null) {
             def internalandroidProguardFile = new File(workingDirectory, "proguard-android-optimize.txt");
-            com.android.build.gradle.ProguardFiles.createProguardFile("proguard-android-optimize.txt", internalandroidProguardFile)
+            if (!internalandroidProguardFile.exists()) {
+                com.android.build.gradle.ProguardFiles.createProguardFile(this.project.androidMultilibProguard.getAndroidProguardFileName(), internalandroidProguardFile)
+            }
             task.configuration(internalandroidProguardFile)
         }
     }
