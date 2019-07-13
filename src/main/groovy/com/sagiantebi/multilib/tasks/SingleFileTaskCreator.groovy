@@ -1,10 +1,7 @@
 package com.sagiantebi.multilib.tasks
 
 import com.android.build.gradle.tasks.InvokeManifestMerger
-import com.google.common.io.LineReader
-import com.sagiantebi.multilib.util.VariantDataCollector
 import com.sagiantebi.multilib.util.VariantDataCollector.CollectedVariantData
-import jdk.internal.util.xml.impl.ReaderUTF8
 import org.gradle.api.Project
 import org.gradle.api.Task
 import org.gradle.api.file.ConfigurableFileTree
@@ -13,11 +10,9 @@ import org.gradle.api.internal.file.collections.LazilyInitializedFileCollection
 import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.bundling.Zip
 import org.pantsbuild.jarjar.Main
-import org.w3c.dom.Document
 import org.w3c.dom.Node
 import proguard.gradle.ProGuardTask
 
-import javax.xml.parsers.DocumentBuilder
 import javax.xml.parsers.DocumentBuilderFactory
 import javax.xml.transform.TransformerFactory
 import javax.xml.transform.dom.DOMSource
@@ -36,7 +31,7 @@ class SingleFileTaskCreator {
     SingleFileTaskCreator(Project project, File workingDir, String packageName) {
         this.project = project
         this.workingDir = workingDir
-        this.packageName = packageName;
+        this.packageName = packageName
         this.destLibrary = new File(workingDir, "single-aar")
     }
 
@@ -49,10 +44,10 @@ class SingleFileTaskCreator {
         List<File> sourceFolders = new ArrayList<>()
         List<String> sourceFoldersPackageNames = new ArrayList<>()
         List<String> packageNamesToRename = new ArrayList<>()
-        File mainLibrarySourceFolder = null;
+        File mainLibrarySourceFolder = null
 
-        File mainManifestFile;
-        List<File> secondaryManifestFiles = new ArrayList<>();
+        File mainManifestFile
+        List<File> secondaryManifestFiles = new ArrayList<>()
         def dest = new File(dirToExtractThingsInto, "staging")
 
         Task mkdirs = this.project.tasks.create("proguardMultiLibCreateDirectories")
@@ -67,11 +62,12 @@ class SingleFileTaskCreator {
 
             def dirName = new File(dirToExtractThingsInto, data.outputFile.name.substring(0, data.outputFile.name.lastIndexOf(".")))
             sourceFolders.add(dirName)
-            def libraryPackageName = data.androidVariant.applicationId;
+            def libraryPackageName = data.androidVariant.applicationId
             sourceFoldersPackageNames.add(appendedTaskNameFromPackageName(libraryPackageName))
 
             //extract the aar
             Task task = project.tasks.create("proguardMultiLibExplodeAars${appendedTaskNameFromPackageName(libraryPackageName)}", Copy)
+            task.description = "Explodes (unzip) the library (of ${data.project.path}) 's AARs into a temporary directory"
             task.dependsOn data.assembleTask
             task.into dirName
             task.dependsOn mkdirs
@@ -82,6 +78,7 @@ class SingleFileTaskCreator {
 
             File r = new File(dirName, "R.txt")
             Task jarjar = generateJarJarTask(data, libraryPackageName, classesJar, dirToExtractThingsInto, dest, r)
+            jarjar.description = "Transforms the ${data.project.path} class output and changes the relevant R usages"
             jarjar.dependsOn(mkdirs)
             jarjar.dependsOn(task)
             jarjar.mustRunAfter(task)
@@ -106,22 +103,20 @@ class SingleFileTaskCreator {
             throw new RuntimeException("could not find the target AndroidManifest.xml for the package ${this.packageName}")
         }
 
-        //merge R.txt
-        //merge proguard.txt
-        //merge AndroidManifest.xml
-        //parse package names from AndroidManifest.xml for the jarjar renaming
-        //merge classes.jar using jarjar. rename relevant R imports.
-
         Task annotationMerger = generateAnnotationMergerTask(sourceFolders)
+        annotationMerger.description = "Merges all the libraries' annotation.zip files into a single Zip"
         annotationMerger.dependsOn(deps)
 
         Task r = generateFileMergerTask("proguardMultiLibMergeR", rFiles, new File(destLibrary, "R.txt"))
-        r.dependsOn(deps) //make sure exploding is done
+        r.description = "Merges all the libraries' R.txt files into a single R.txt"
+        r.dependsOn(deps)
 
         Task proguardMerger = generateFileMergerTask("proguardMultiLibMergeProguardFiles", proguardFiles, new File(destLibrary, "proguard.txt"))
+        proguardMerger.description = "Merges all the libraries' proguard.txt files into a single proguard.txt"
         proguardMerger.dependsOn(deps)
 
         Task merger = generateAndroidManifestMergerTask(mainManifestFile, secondaryManifestFiles)
+        merger.description = "Merges all the libraries' AndroidManifests to a single Manifest file"
         merger.dependsOn(mkdirs)
         merger.dependsOn(deps)
 
@@ -137,42 +132,53 @@ class SingleFileTaskCreator {
         proguardTask.dependsOn(copyFiles)
 
         Task generateAndroidLibraryArchive = project.tasks.create("proguardMultiLibGenerateAndoirdLibraryArchive", Zip)
+        generateAndroidLibraryArchive.description = "creates an AAR from the temporary folder we copied everying into"
         generateAndroidLibraryArchive.dependsOn(annotationMerger)
         File aarDest = new File(workingDir, SimpleTasksCreator.PROGUARD_DEST_LIBS)
         generateAndroidLibraryArchive.from(destLibrary)
-        generateAndroidLibraryArchive.setArchiveName("${packageName}-${System.currentTimeMillis()}.aar")
+        generateAndroidLibraryArchive.setArchiveName("${packageName}-merged.aar")
         generateAndroidLibraryArchive.setDestinationDir(aarDest)
 
         proguardTask.finalizedBy(generateAndroidLibraryArchive)
 
+        Task cleanup = project.tasks.create("proguardMultiLibCleanup")
+        cleanup.description = "Deletes all the temporary directories used for the creating the single library"
+        generateAndroidLibraryArchive.finalizedBy(cleanup)
+        cleanup.doLast {
+            dirToExtractThingsInto.deleteDir()
+            destLibrary.deleteDir()
+        }
+
         return proguardTask
     }
 
-    String appendedTaskNameFromPackageName(String pkg) {
+    static String appendedTaskNameFromPackageName(String pkg) {
         return pkg.split("\\.").collect { str -> str.capitalize() }.join("")
     }
 
     Task generateJarJarTask(CollectedVariantData data, String libraryPackageName, File classesJar, File dirToExtractThingsInto, File dest, File r) {
-        Task jarjar = project.tasks.create("proguardMultiLibJarJar${appendedTaskNameFromPackageName(data.androidVariant.applicationId)}")
+        Task jarjar = project.tasks.create("proguardMultiLibTransformWithJarJar${appendedTaskNameFromPackageName(data.androidVariant.applicationId)}")
         jarjar.doLast {
-            Main main = new Main();
-            File rulesFile = new File(dirToExtractThingsInto, "rules.txt")
-            if (rulesFile.exists()) {
-                rulesFile.delete()
-            }
-            rulesFile.createNewFile()
+            if (r.exists()) {
+                Main main = new Main()
+                File rulesFile = new File(dirToExtractThingsInto, "rules.txt")
+                if (rulesFile.exists()) {
+                    rulesFile.delete()
+                }
+                rulesFile.createNewFile()
 
-            //read R and get all the resource types we require for this library.
-            Collection<String> resTypesInLibrary = resourceTypesFromRFile(r)
-            if (resTypesInLibrary.isEmpty()) {
-                resTypesInLibrary = ["id", "layout", "drawable", "dimen", "color", "integer", "string", "attr", "bool", "color", "style"]
+                //read R and get all the resource types we require for this library.
+                Collection<String> resTypesInLibrary = resourceTypesFromRFile(r)
+                if (resTypesInLibrary.isEmpty()) {
+                    resTypesInLibrary = ["id", "layout", "drawable", "dimen", "color", "integer", "string", "attr", "bool", "color", "style"]
+                }
+                resTypesInLibrary.each { str ->
+                    rulesFile << "rule ${libraryPackageName}.R" + '**' + "${str} ${this.packageName}.R" + '@1' + "${str}\n"
+                }
+                project.logger.debug("Starting jarjar... for ${data.project.path} using ${rulesFile} and ${classesJar}")
+                main.process(rulesFile, classesJar, new File(dest, "${data.project.name}-classes.jar"))
+                project.logger.debug("jarjar finished for ${data.project.path}")
             }
-            resTypesInLibrary.each { str ->
-                rulesFile << "rule ${libraryPackageName}.R" + '**' + "${str} ${this.packageName}.R" + '@1' + "${str}\n"
-            }
-            project.logger.debug("Starting jarjar... for ${data.project.path} using ${rulesFile} and ${classesJar}")
-            main.process(rulesFile, classesJar, new File(dest, "${data.project.name}-classes.jar"))
-            project.logger.debug("jarjar finished for ${data.project.path}")
         }
     }
 
@@ -184,22 +190,24 @@ class SingleFileTaskCreator {
 
     List<Task> generateDirectoriesCopyTask(File mainDirectory, List<File> secondaryDirectories, List<String> taskNames, List<Task> explodingTasks) {
         Copy copyMain = (Copy)project.tasks.create("proguardMultiLibCopyLibraryExplodedFiles", Copy)
+        copyMain.description = "Copies the main library's files into a temporary folder which is the base for the new single AAR"
         copyMain.from(mainDirectory)
         copyMain.into(destLibrary)
         copyMain.exclude("AndroidManifest.xml", "proguard.txt", "annotations.zip", "classes.jar")
         copyMain.dependsOn(explodingTasks)
         def asd = secondaryDirectories.findAll { d -> d.absolutePath != mainDirectory.absolutePath }.collect() { f ->
             Copy copyEverythingElse = (Copy)project.tasks.create("proguardMultiLibCopyFiles${taskNames.get(secondaryDirectories.indexOf(f))}", Copy)
+            copyEverythingElse.description = "Copies the other libraries' files into the temporary directory, excluding files which are merged"
             copyEverythingElse.exclude("AndroidManifest.xml", "proguard.txt", "annotations.zip", "classes.jar", "**/values**/*.xml")
             copyEverythingElse.from(f)
             copyEverythingElse.into(destLibrary)
 
             Task mergeXml = project.tasks.create("proguardMultiLibMergeValues${taskNames.get(secondaryDirectories.indexOf(f))}")
+            mergeXml.description = "Merges the resource values from ${taskNames.get(secondaryDirectories.indexOf(f))} into the primary library's values"
             mergeXml.doLast {
                 ConfigurableFileTree files = project.fileTree(f)
                 files.include("**/values**/*.xml")
                 files.collect().each { valuesFile ->
-                    project.logger.warn("directory from - ${valuesFile.parent}, filename - ${valuesFile.name}")
                     ConfigurableFileTree currentMatchingFiles = project.fileTree(destLibrary)
                     currentMatchingFiles.include("**/${valuesFile.parentFile.name}/${valuesFile.name}")
                     def collect = currentMatchingFiles.collect()
