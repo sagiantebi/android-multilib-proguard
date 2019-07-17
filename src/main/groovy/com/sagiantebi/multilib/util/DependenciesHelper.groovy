@@ -58,8 +58,18 @@ public class DependenciesHelper {
 
     private Project project;
 
+    private Set<String> ignoredDependencies = new HashSet<>()
+
     public DependenciesHelper(Project project) {
         this.project = project
+    }
+
+    /**
+     * Marks these notations as something that shouldn't be added to any of the return values.
+     * @param notationsToIgnore
+     */
+    void removeDependenciesByNotation(List<String> notationsToIgnore) {
+        ignoredDependencies.addAll(notationsToIgnore)
     }
 
     /**
@@ -238,7 +248,9 @@ public class DependenciesHelper {
                         if (d instanceof DefaultSelfResolvingDependency) {
                             DefaultSelfResolvingDependency selfResolvingDependency = d;
                             project.logger.debug("got a self resolving dependecy - ${selfResolvingDependency.files.files}")
-                            out.addAll(selfResolvingDependency.files.files)
+                            if (!ignoredDependencies.contains("${selfResolvingDependency.group}:${selfResolvingDependency.name}:${selfResolvingDependency.version}")) {
+                                out.addAll(selfResolvingDependency.files.files)
+                            }
                         }
                     }
                     collectedVariantData.project.configurations.remove(temp)
@@ -248,7 +260,9 @@ public class DependenciesHelper {
                 if (!isInclusive(localInclusiveModules, d)) {
                     Set<ResolvedArtifact> artifacts = d.allModuleArtifacts
                     artifacts.each { ResolvedArtifact ar ->
-                        out.add(ar.file)
+                        if (!ignoredDependencies.contains("${d.getModuleGroup()}:${d.getModuleName()}:${d.getModuleVersion()}".toString())) {
+                            out.add(ar.file)
+                        }
                     }
                 }
             }

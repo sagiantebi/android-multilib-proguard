@@ -174,7 +174,7 @@ public class SimpleTasksCreator {
      * @param runAapt the task itself, so we can add task dependencies
      */
 
-    private void addResourceDirectoriesToAaptArguments(List<String> args, VariantDataCollector.CollectedVariantData data, Task runAapt) {
+    private static void addResourceDirectoriesToAaptArguments(List<String> args, VariantDataCollector.CollectedVariantData data, Task runAapt) {
         List<String> depResDirs = new ArrayList<>()
         List<Task> depResProcessTasks = new ArrayList<>()
 
@@ -257,7 +257,7 @@ public class SimpleTasksCreator {
      * @param collectedVariantDatas
      * @return
      */
-    public ProGuardTask createProguardTask(String filePath, List<VariantDataCollector.CollectedVariantData> collectedVariantDatas, File out) {
+    public ProGuardTask createProguardTask(String filePath, List<VariantDataCollector.CollectedVariantData> collectedVariantDatas, File out, List<String> dependencyNotationsToIgnore = new ArrayList<>()) {
         ProGuardTask proGuardTask = project.tasks.create("proguardMultiLib", ProGuardTask)
         File output = out == null ? new File(workingDirectory, PROGUARD_DEST_LIBS) : out
         configureProguardTaskOutput(proGuardTask, output);
@@ -267,7 +267,7 @@ public class SimpleTasksCreator {
         proGuardTask.injars(filePath)
         proGuardTask.outjars(output.getAbsolutePath())
 
-        configureProguardTaskLibraryJars(proGuardTask, collectedVariantDatas)
+        configureProguardTaskLibraryJars(proGuardTask, collectedVariantDatas, dependencyNotationsToIgnore)
         configureProguardTaskConfigurationFiles(proGuardTask)
         configureProguardTaskOutputs(proGuardTask, new File(workingDirectory, PROGUARD_OUTPUTS_DEST))
         project.logger.debug("proguard task - ${proGuardTask}")
@@ -321,8 +321,9 @@ public class SimpleTasksCreator {
         }
     }
 
-    private void configureProguardTaskLibraryJars(ProGuardTask task, List<VariantDataCollector.CollectedVariantData> collectedVariantDatas) {
+    private void configureProguardTaskLibraryJars(ProGuardTask task, List<VariantDataCollector.CollectedVariantData> collectedVariantDatas, List<String> dependencyNotationsToIgnore) {
         List<File> libraryJars = new ArrayList<>()
+        dependencyHelper.removeDependenciesByNotation(dependencyNotationsToIgnore)
         libraryJars.addAll(dependencyHelper.findLibraryJars(collectedVariantDatas))
         libraryJars.add(dependencyHelper.findAndroidJar(collectedVariantDatas))
         libraryJars.addAll(dependencyHelper.findCompiledAars(collectedVariantDatas))

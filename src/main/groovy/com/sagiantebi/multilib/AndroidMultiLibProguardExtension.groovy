@@ -91,6 +91,11 @@ class AndroidMultiLibProguardExtension {
 
     private List<WrappedProject> targets = new ArrayList<>()
 
+    List<WrappedDependency> getDependencies() {
+        return dependencies
+    }
+    private List<WrappedDependency> dependencies = new ArrayList<>()
+
     public ProjectOptions addProject(Project project) {
         ProjectOptions options = new ProjectOptions()
         this.targets << new WrappedProject(project, options)
@@ -108,6 +113,19 @@ class AndroidMultiLibProguardExtension {
         if (this.project != project) {
             this.project.evaluationDependsOn(project.path)
         }
+        return options
+    }
+
+    public DependencyOptions addDependency(String dependency) {
+        DependencyOptions options = new DependencyOptions()
+        this.dependencies << new WrappedDependency(dependency, options)
+        return options
+    }
+
+    public DependencyOptions addDependency(String dependency, Closure closure) {
+        DependencyOptions options = new DependencyOptions()
+        project.configure(options, closure)
+        this.dependencies << new WrappedDependency(dependency, options)
         return options
     }
 
@@ -165,6 +183,70 @@ class AndroidMultiLibProguardExtension {
         @Override
         String toString() {
             return super.toString() + "[flavor - ${flavorName}, release - ${release}]"
+        }
+    }
+
+    static class WrappedDependency {
+
+        String dependencyNotation;
+        DependencyOptions options;
+
+        WrappedDependency(String dependencyNotation) {
+            this(dependencyNotation, new DependencyOptions())
+        }
+
+        WrappedDependency(String dependencyNotation, DependencyOptions options) {
+            this.dependencyNotation = dependencyNotation
+            this.options = options
+        }
+
+        String getDependencyNotation() {
+            return dependencyNotation
+        }
+
+        void setDependencyNotation(String dependencyNotation) {
+            this.dependencyNotation = dependencyNotation
+        }
+
+        DependencyOptions getOptions() {
+            return options
+        }
+
+        void setOptions(DependencyOptions options) {
+            this.options = options
+        }
+
+
+        @Override
+        public String toString() {
+            return "WrappedDependency{dependencyNotation='$dependencyNotation', options=$options}";
+        }
+    }
+
+    public static class DependencyOptions {
+
+        String renameFrom
+        String renameTo
+
+        String getRenameFrom() {
+            return renameFrom
+        }
+
+        void setRenameFrom(String renameFrom) {
+            this.renameFrom = renameFrom
+        }
+
+        String getRenameTo() {
+            return renameTo
+        }
+
+        void setRenameTo(String renameTo) {
+            this.renameTo = renameTo
+        }
+
+        @Override
+        public String toString() {
+            return "DependencyOptions{renameFrom='$renameFrom', renameTo='$renameTo'}";
         }
     }
 

@@ -66,6 +66,10 @@ class AndroidMultiLibProguardPlugin implements Plugin<Project> {
     void configureTasks() {
         SimpleTasksCreator taskCreator = new SimpleTasksCreator(project, workingDirectory)
         final List<VariantDataCollector.CollectedVariantData> collectedData = VariantDataCollector.resolveAllTargets(wrappedProjectList)
+        final List<AndroidMultiLibProguardExtension.WrappedDependency> wrappedDependencies = project.androidMultilibProguard.getDependencies()
+        if (!project.androidMultilibProguard.isSingleFileMode() && wrappedDependencies.size() > 0) {
+            project.logger.warn("dependencies were added but single file mode is set to false. will ignore the declared dependencies.")
+        }
         if (collectedData.size() > 0) {
             Task copy = taskCreator.createCopyTask(collectedData)
             List<File> proguardConfigs = project.androidMultilibProguard.getProguardConfigurationFiles()
@@ -77,7 +81,7 @@ class AndroidMultiLibProguardPlugin implements Plugin<Project> {
                         throw new IllegalArgumentException("singleFileMode should be used in conjunction with singleFileFinalPackageName")
                     }
                     SingleFileTaskCreator singleFileTaskCreator = new SingleFileTaskCreator(project, workingDirectory, project.androidMultilibProguard.getSingleFileFinalPackageName());
-                    proguardTask = singleFileTaskCreator.generateProguardTask(taskCreator, collectedData)
+                    proguardTask = singleFileTaskCreator.generateProguardTask(taskCreator, collectedData, wrappedDependencies)
                 } else {
                     proguardTask = taskCreator.createProguardTask(copy.outputs.files.asPath, collectedData, null)
                 }
