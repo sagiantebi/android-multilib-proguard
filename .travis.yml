@@ -12,7 +12,6 @@ stages:
   - name: deploy
     if: branch = master
 
-
 jobs:
   include:
     - stage: compile
