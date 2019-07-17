@@ -44,6 +44,17 @@ class AndroidMultiLibProguardExtension {
      */
     private String androidProguardFileName = null;
 
+    /**
+     * If set to true, will attempt to create a single library from the input projects
+     */
+    private boolean singleFileMode = false;
+
+    /**
+     * If {@ref singleFileMode} is set to true, this must contain the target packagename for the final library.<br/>
+     * This will also help us find the main manifest which will be used for the manifest merger.
+     */
+    private String singleFileFinalPackageName;
+
     AndroidMultiLibProguardExtension(Project project) {
         this.project = project
     }
@@ -58,12 +69,32 @@ class AndroidMultiLibProguardExtension {
         }
     }
 
+    public boolean isSingleFileMode() {
+        return singleFileMode
+    }
+
+    public void setSingleFileMode(boolean singleFileMode) {
+        this.singleFileMode = singleFileMode
+    }
+
+    String getSingleFileFinalPackageName() {
+        return singleFileFinalPackageName
+    }
+
+    void setSingleFileFinalPackageName(String singleFileFinalPackageName) {
+        this.singleFileFinalPackageName = singleFileFinalPackageName
+    }
+
     List<WrappedProject> getTargets() {
         return targets
     }
+
     private List<WrappedProject> targets = new ArrayList<>()
 
-
+    List<WrappedDependency> getDependencies() {
+        return dependencies
+    }
+    private List<WrappedDependency> dependencies = new ArrayList<>()
 
     public ProjectOptions addProject(Project project) {
         ProjectOptions options = new ProjectOptions()
@@ -82,6 +113,19 @@ class AndroidMultiLibProguardExtension {
         if (this.project != project) {
             this.project.evaluationDependsOn(project.path)
         }
+        return options
+    }
+
+    public DependencyOptions addDependency(String dependency) {
+        DependencyOptions options = new DependencyOptions()
+        this.dependencies << new WrappedDependency(dependency, options)
+        return options
+    }
+
+    public DependencyOptions addDependency(String dependency, Closure closure) {
+        DependencyOptions options = new DependencyOptions()
+        project.configure(options, closure)
+        this.dependencies << new WrappedDependency(dependency, options)
         return options
     }
 
@@ -139,6 +183,70 @@ class AndroidMultiLibProguardExtension {
         @Override
         String toString() {
             return super.toString() + "[flavor - ${flavorName}, release - ${release}]"
+        }
+    }
+
+    static class WrappedDependency {
+
+        String dependencyNotation;
+        DependencyOptions options;
+
+        WrappedDependency(String dependencyNotation) {
+            this(dependencyNotation, new DependencyOptions())
+        }
+
+        WrappedDependency(String dependencyNotation, DependencyOptions options) {
+            this.dependencyNotation = dependencyNotation
+            this.options = options
+        }
+
+        String getDependencyNotation() {
+            return dependencyNotation
+        }
+
+        void setDependencyNotation(String dependencyNotation) {
+            this.dependencyNotation = dependencyNotation
+        }
+
+        DependencyOptions getOptions() {
+            return options
+        }
+
+        void setOptions(DependencyOptions options) {
+            this.options = options
+        }
+
+
+        @Override
+        public String toString() {
+            return "WrappedDependency{dependencyNotation='$dependencyNotation', options=$options}";
+        }
+    }
+
+    public static class DependencyOptions {
+
+        String renameFrom
+        String renameTo
+
+        String getRenameFrom() {
+            return renameFrom
+        }
+
+        void setRenameFrom(String renameFrom) {
+            this.renameFrom = renameFrom
+        }
+
+        String getRenameTo() {
+            return renameTo
+        }
+
+        void setRenameTo(String renameTo) {
+            this.renameTo = renameTo
+        }
+
+        @Override
+        public String toString() {
+            return "DependencyOptions{renameFrom='$renameFrom', renameTo='$renameTo'}";
         }
     }
 

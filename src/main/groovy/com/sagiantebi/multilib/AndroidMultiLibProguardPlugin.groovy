@@ -26,10 +26,14 @@
 package com.sagiantebi.multilib
 
 import com.sagiantebi.multilib.tasks.SimpleTasksCreator
+import com.sagiantebi.multilib.tasks.SingleFileTaskCreator
 import com.sagiantebi.multilib.util.VariantDataCollector
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.Task
+import org.gradle.api.internal.file.archive.ZipFileTree
+
+import org.gradle.api.tasks.Copy
 
 class AndroidMultiLibProguardPlugin implements Plugin<Project> {
 
@@ -38,8 +42,6 @@ class AndroidMultiLibProguardPlugin implements Plugin<Project> {
     private Project project
 
     private File workingDirectory
-
-    private SimpleTasksCreator taskCreator;
 
     private List<AndroidMultiLibProguardExtension.WrappedProject> wrappedProjectList = new ArrayList<>();
 
@@ -62,14 +64,27 @@ class AndroidMultiLibProguardPlugin implements Plugin<Project> {
     }
 
     void configureTasks() {
-        taskCreator = new SimpleTasksCreator(project, workingDirectory)
+        SimpleTasksCreator taskCreator = new SimpleTasksCreator(project, workingDirectory)
         final List<VariantDataCollector.CollectedVariantData> collectedData = VariantDataCollector.resolveAllTargets(wrappedProjectList)
+        final List<AndroidMultiLibProguardExtension.WrappedDependency> wrappedDependencies = project.androidMultilibProguard.getDependencies()
+        if (!project.androidMultilibProguard.isSingleFileMode() && wrappedDependencies.size() > 0) {
+            project.logger.warn("dependencies were added but single file mode is set to false. will ignore the declared dependencies.")
+        }
         if (collectedData.size() > 0) {
             Task copy = taskCreator.createCopyTask(collectedData)
             List<File> proguardConfigs = project.androidMultilibProguard.getProguardConfigurationFiles()
             if (proguardConfigs.size() > 0) {
                 Task prepareProguardMultiLib = taskCreator.createCollectProguardFilesTask(collectedData)
-                Task proguardTask = taskCreator.createProguardTask(copy.outputs.files.asPath, collectedData)
+                Task proguardTask;
+                if (project.androidMultilibProguard.isSingleFileMode()) {
+                    if (project.androidMultilibProguard.getSingleFileFinalPackageName() == null || project.androidMultilibProguard.getSingleFileFinalPackageName().isEmpty()) {
+                        throw new IllegalArgumentException("singleFileMode should be used in conjunction with singleFileFinalPackageName")
+                    }
+                    SingleFileTaskCreator singleFileTaskCreator = new SingleFileTaskCreator(project, workingDirectory, project.androidMultilibProguard.getSingleFileFinalPackageName());
+                    proguardTask = singleFileTaskCreator.generateProguardTask(taskCreator, collectedData, wrappedDependencies)
+                } else {
+                    proguardTask = taskCreator.createProguardTask(copy.outputs.files.asPath, collectedData, null)
+                }
 
                 //create the task graph as the following -
                 //copy -> prepareProguard -> createProguardConfig -> proguard

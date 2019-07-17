@@ -1,10 +1,22 @@
 language: java
 
 jdk:
-  - oraclejdk8
+  - openjdk11
 
 os:
   - linux
+  -
+stages:
+  - compile
+  - test
+  - name: deploy
+    if: branch = master
 
-script:
-  - ./gradlew clean assemble
+jobs:
+  include:
+    - stage: compile
+      script: ./gradlew clean assemble
+    - stage: test
+      script: ./gradlew test
+    - stage: deploy
+      script: ./gradlew bintrayUpload

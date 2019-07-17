@@ -30,6 +30,7 @@ import com.android.build.gradle.BaseExtension
 import com.android.build.gradle.LibraryExtension
 import com.android.build.gradle.api.AndroidSourceSet
 import com.android.build.gradle.internal.dependency.AndroidTypeAttr
+import com.android.build.gradle.internal.scope.GlobalScope
 import com.android.builder.core.AndroidBuilder
 import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.Project
@@ -57,8 +58,18 @@ public class DependenciesHelper {
 
     private Project project;
 
+    private Set<String> ignoredDependencies = new HashSet<>()
+
     public DependenciesHelper(Project project) {
         this.project = project
+    }
+
+    /**
+     * Marks these notations as something that shouldn't be added to any of the return values.
+     * @param notationsToIgnore
+     */
+    void removeDependenciesByNotation(List<String> notationsToIgnore) {
+        ignoredDependencies.addAll(notationsToIgnore)
     }
 
     /**
@@ -97,11 +108,23 @@ public class DependenciesHelper {
         //there are also libraries added by android as 'provided' / 'runtime' during building, eg. org.apache.http.legacy
         //this is an extremely dirty solution, but I havn't found any easier means.
         AndroidBuilder builder = null;
+        GlobalScope globalScope = null;
         try {
-            Field field = BaseExtension.class.getDeclaredField("androidBuilder")
-            if (field != null) {
-                field.setAccessible(true)
-                builder = field.get(collectedVariantData.androidExtension)
+
+            Field gField = BaseExtension.class.getDeclaredField("globalScope")
+            if (gField != null) {
+                gField.setAccessible(true)
+                globalScope = gField.get(collectedVariantData.androidExtension)
+                builder = globalScope.getAndroidBuilder()
+            }
+
+            if (builder == null) {
+                //pre 3.4
+                Field field = BaseExtension.class.getDeclaredField("androidBuilder")
+                if (field != null) {
+                    field.setAccessible(true)
+                    builder = field.get(collectedVariantData.androidExtension)
+                }
             }
         } catch (Throwable t) {
 
@@ -225,16 +248,21 @@ public class DependenciesHelper {
                         if (d instanceof DefaultSelfResolvingDependency) {
                             DefaultSelfResolvingDependency selfResolvingDependency = d;
                             project.logger.debug("got a self resolving dependecy - ${selfResolvingDependency.files.files}")
-                            out.addAll(selfResolvingDependency.files.files)
+                            if (!ignoredDependencies.contains("${selfResolvingDependency.group}:${selfResolvingDependency.name}:${selfResolvingDependency.version}")) {
+                                out.addAll(selfResolvingDependency.files.files)
+                            }
                         }
                     }
+                    collectedVariantData.project.configurations.remove(temp)
                 }
             }
             dependencies.each { ResolvedDependency d ->
                 if (!isInclusive(localInclusiveModules, d)) {
                     Set<ResolvedArtifact> artifacts = d.allModuleArtifacts
                     artifacts.each { ResolvedArtifact ar ->
-                        out.add(ar.file)
+                        if (!ignoredDependencies.contains("${d.getModuleGroup()}:${d.getModuleName()}:${d.getModuleVersion()}".toString())) {
+                            out.add(ar.file)
+                        }
                     }
                 }
             }
