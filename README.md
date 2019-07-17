@@ -18,7 +18,7 @@ A Gradle plugin which automates the procedures required to apply proguard to mul
 
 add `android-multlib-proguard` to your build script's dependepcies -
 ```groovy
-classpath 'com.sagiantebi:android-multilib-proguard:0.11'
+classpath 'com.sagiantebi:android-multilib-proguard:0.20'
 ```
 configure the plugin as you like -
 ```groovy
