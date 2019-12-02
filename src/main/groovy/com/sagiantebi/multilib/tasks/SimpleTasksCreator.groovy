@@ -223,6 +223,13 @@ public class SimpleTasksCreator {
                 }
             }
         }
+
+        data.androidVariant.allRawAndroidResources.files.each {
+            if (it.exists()) {
+                depResDirs.add(it.path)
+            }
+        }
+
         if (depResDirs.size() > 0) {
             depResDirs.each { s->
                 args.add("-S")
