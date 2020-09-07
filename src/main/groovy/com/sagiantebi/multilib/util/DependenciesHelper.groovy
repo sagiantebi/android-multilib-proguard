@@ -29,9 +29,7 @@ import com.android.build.api.attributes.VariantAttr
 import com.android.build.gradle.BaseExtension
 import com.android.build.gradle.LibraryExtension
 import com.android.build.gradle.api.AndroidSourceSet
-import com.android.build.gradle.internal.dependency.AndroidTypeAttr
 import com.android.build.gradle.internal.scope.GlobalScope
-import com.android.builder.core.AndroidBuilder
 import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.Project
 import org.gradle.api.artifacts.*
@@ -106,38 +104,14 @@ public class DependenciesHelper {
         output.addAll(findResolvedDependencies(collectedVariantData, localInclusiveModules, invokerFor(KEY_OLD_PROVIDED)));
 
         //there are also libraries added by android as 'provided' / 'runtime' during building, eg. org.apache.http.legacy
-        //this is an extremely dirty solution, but I havn't found any easier means.
-        AndroidBuilder builder = null;
-        GlobalScope globalScope = null;
-        try {
-
-            Field gField = BaseExtension.class.getDeclaredField("globalScope")
-            if (gField != null) {
-                gField.setAccessible(true)
-                globalScope = gField.get(collectedVariantData.androidExtension)
-                builder = globalScope.getAndroidBuilder()
-            }
-
-            if (builder == null) {
-                //pre 3.4
-                Field field = BaseExtension.class.getDeclaredField("androidBuilder")
-                if (field != null) {
-                    field.setAccessible(true)
-                    builder = field.get(collectedVariantData.androidExtension)
-                }
-            }
-        } catch (Throwable t) {
-
-        }
-        if (builder != null) {
-            List<File> extras = builder.getBootClasspath(true)
-            extras.each { f ->
-                if (!f.name.equals("android.jar")) {
-                    project.logger.debug("adding ${f} from builder.getBootClasspath()")
-                    output.add(f)
-                }
+        List<File> extras = collectedVariantData.androidExtension.bootClasspath
+        extras.each { f ->
+            if (!f.name.equals("android.jar")) {
+                project.logger.debug("adding ${f} from androidExtension.getBootClasspath()")
+                output.add(f)
             }
         }
+        
         return output;
     }
 
@@ -235,7 +209,6 @@ public class DependenciesHelper {
 
                     container.attribute(VariantAttr.ATTRIBUTE, variantNameAttr);
                     container.attribute(Usage.USAGE_ATTRIBUTE, apiUsage);
-                    container.attribute(AndroidTypeAttr.ATTRIBUTE, factory.named(AndroidTypeAttr.class, AndroidTypeAttr.AAR));
 
                     configuration.allDependencies.each { d->
                         temp.dependencies.add(d)

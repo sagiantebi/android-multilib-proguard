@@ -130,18 +130,17 @@ public class SimpleTasksCreator {
                                           "--no-crunch",
                                           "-I", "${data.androidExtension.bootClasspath.first().absolutePath}",
                                           "-M", "${manifest}",
-                                          "-S", "${task.inputResourcesDir.get().singleFile}",
                                           "-G", "${targetFile.absolutePath}"]
                 addResourceDirectoriesToAaptArguments(arguments, data, runAapt)
                 runAapt.doLast {
-                    project.logger.debug("aapt invokation - aapt ${arguments.join(" ")}")
+                    project.logger.warn("aapt invokation - aapt ${arguments.join(" ")}")
                     List<String> finalArgs = arguments;
                     if (!manifest.exists()) {
                         try {
                             def manifestDirectory = task.manifestFiles.get();
                             File jsonFile = new File(manifestDirectory.asFile, "output.json")
-                            ArrayList<AndroidOutput> fff = new Gson().fromJson(new String(jsonFile.readBytes()), ArrayList.class)
-                            File libraryManifest = new File(manifestDirectory.asFile, fff.first().path)
+                            def fff = new Gson().fromJson(new String(jsonFile.readBytes()), Map.class)
+                            File libraryManifest = new File(manifestDirectory.asFile, fff.get("elements").first().path)
                             finalArgs = new ArrayList<>()
                             arguments.each { s -> finalArgs.add(s == "${manifest}" ? libraryManifest.absolutePath : s) }
                         } catch (Exception t) {
@@ -215,7 +214,7 @@ public class SimpleTasksCreator {
                         def otherDep = VariantDataCollector.resolveAllTargets(Collections.singletonList(wp))
                         if (otherDep.size() > 0) {
                             GenerateLibraryRFileTask resTask = otherDep.first().androidVariant.outputs.first().processResourcesProvider.get()
-                            def resDir = resTask.getInputResourcesDir().get().getSingleFile().absolutePath
+                            def resDir = resTask.localResourcesFile.get().asFile.absolutePath
                             depResDirs.add(resDir)
                             depResProcessTasks.add(resTask)
                         }
@@ -231,7 +230,7 @@ public class SimpleTasksCreator {
         }
 
         if (depResDirs.size() > 0) {
-            depResDirs.each { s->
+            depResDirs.findAll {new File(it).isDirectory()}.each { s->
                 args.add("-S")
                 args.add(s)
             }
