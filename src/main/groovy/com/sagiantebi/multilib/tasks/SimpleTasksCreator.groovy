@@ -27,7 +27,7 @@ package com.sagiantebi.multilib.tasks
 
 import com.android.build.gradle.api.AndroidSourceSet
 import com.android.build.gradle.internal.res.GenerateLibraryRFileTask
-import com.android.build.gradle.internal.scope.InternalArtifactType
+import com.android.build.gradle.internal.tasks.ProguardTask
 import com.google.gson.Gson
 import com.sagiantebi.multilib.AndroidMultiLibProguardExtension
 import com.sagiantebi.multilib.util.DependenciesHelper
@@ -39,8 +39,9 @@ import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.file.FileCollection
 import org.gradle.api.internal.file.collections.LazilyInitializedFileCollection
 import org.gradle.api.tasks.Copy
-import org.json.simple.JSONObject
 import proguard.gradle.ProGuardTask
+
+import java.lang.ref.WeakReference
 
 import static com.android.build.gradle.internal.scope.InternalArtifactType.LIBRARY_MANIFEST
 
@@ -74,10 +75,20 @@ public class SimpleTasksCreator {
     private final File workingDirectory
     private DependenciesHelper dependencyHelper
 
+    private WeakReference<ProguardTask> proguardTask = new WeakReference<>(null);
+
     public SimpleTasksCreator(Project project, File workingDirectory) {
         this.project = project
         this.workingDirectory = workingDirectory
         this.dependencyHelper = new DependenciesHelper(project)
+    }
+
+    public void setProguardTask(ProGuardTask task) {
+        this.proguardTask = new WeakReference<>(task);
+    }
+
+    public ProGuardTask getProguardTask() {
+        return proguardTask.get()
     }
 
     /**
@@ -131,9 +142,11 @@ public class SimpleTasksCreator {
                                           "-I", "${data.androidExtension.bootClasspath.first().absolutePath}",
                                           "-M", "${manifest}",
                                           "-G", "${targetFile.absolutePath}"]
-                addResourceDirectoriesToAaptArguments(arguments, data, runAapt)
+                addResourceDirectoriesToAaptArguments(arguments, data, runAapt, true)
                 runAapt.doLast {
-                    project.logger.warn("aapt invokation - aapt ${arguments.join(" ")}")
+                    //add resources the assemble dependency has caught
+                    addResourceDirectoriesToAaptArguments(arguments, data, runAapt, false)
+                    project.logger.info("aapt invokation - aapt ${arguments.join(" ")}")
                     List<String> finalArgs = arguments;
                     if (!manifest.exists()) {
                         try {
@@ -152,6 +165,11 @@ public class SimpleTasksCreator {
                         commandLine aapt
                         args finalArgs
                     }
+                    ProGuardTask pgTask = getProguardTask()
+                    if (pgTask != null) {
+                        pgTask.configuration(targetFile.absolutePath)
+                    }
+
                 }
             }
         } else {
@@ -173,7 +191,7 @@ public class SimpleTasksCreator {
      * @param runAapt the task itself, so we can add task dependencies
      */
 
-    private static void addResourceDirectoriesToAaptArguments(List<String> args, VariantDataCollector.CollectedVariantData data, Task runAapt) {
+    private static void addResourceDirectoriesToAaptArguments(List<String> args, VariantDataCollector.CollectedVariantData data, Task runAapt, boolean modifyTask) {
         List<String> depResDirs = new ArrayList<>()
         List<Task> depResProcessTasks = new ArrayList<>()
 
@@ -212,11 +230,15 @@ public class SimpleTasksCreator {
                         def otherProject = projectDependency.getDependencyProject();
                         AndroidMultiLibProguardExtension.WrappedProject wp = new AndroidMultiLibProguardExtension.WrappedProject(otherProject, new AndroidMultiLibProguardExtension.ProjectOptions())
                         def otherDep = VariantDataCollector.resolveAllTargets(Collections.singletonList(wp))
+                        data.project.logger.debug("${data.project} found project dep - ${d}, otherDep = ${otherDep}")
                         if (otherDep.size() > 0) {
                             GenerateLibraryRFileTask resTask = otherDep.first().androidVariant.outputs.first().processResourcesProvider.get()
+                            resTask.localResourcesFile
                             def resDir = resTask.localResourcesFile.get().asFile.absolutePath
                             depResDirs.add(resDir)
+                            data.project.logger.debug("${data.project} adding dep res dir - ${resDir}")
                             depResProcessTasks.add(resTask)
+                            depResProcessTasks.add(otherDep.first().androidVariant.getAssembleProvider().get())
                         }
                     }
                 }
@@ -235,7 +257,9 @@ public class SimpleTasksCreator {
                 args.add(s)
             }
             args.add("--auto-add-overlay")
-            runAapt.dependsOn(depResProcessTasks)
+            if (modifyTask) {
+                runAapt.dependsOn(depResProcessTasks)
+            }
         }
     }
 
@@ -297,26 +321,6 @@ public class SimpleTasksCreator {
 
     private void configureProguardTaskConfigurationFiles(ProGuardTask task) {
         task.configuration(project.files(project.androidMultilibProguard.getProguardConfigurationFiles()))
-        //since the proguard configuraion files do not exist yet (and proguard task doesn't accept directories)
-        //we create a lazy file collection which returns the files only when these are in existence
-        LazilyInitializedFileCollection collection = new LazilyInitializedFileCollection() {
-            @Override
-            FileCollection createDelegate() {
-                File f = new File(workingDirectory, AAR_CONSUMED_CONFIGURATIONS);
-                File[] list = f.listFiles()
-                if (list == null || list.length == 0) {
-                    return null
-                }
-                project.logger.debug("configureProguardTaskConfigurationFiles, returning the following list of files - ${list}")
-                return project.files(list)
-            }
-
-            @Override
-            String getDisplayName() {
-                return "LazyProguardConfigurations"
-            }
-        }
-        task.configuration(collection)
 
         if (this.project.androidMultilibProguard.getAndroidProguardFileName() != null) {
             def internalandroidProguardFile = new File(workingDirectory, "proguard-android-optimize.txt");

@@ -84,14 +84,20 @@ class AndroidMultiLibProguardPlugin implements Plugin<Project> {
                     proguardTask = singleFileTaskCreator.generateProguardTask(taskCreator, collectedData, wrappedDependencies)
                 } else {
                     proguardTask = taskCreator.createProguardTask(copy.outputs.files.asPath, collectedData, null)
+                    taskCreator.setProguardTask(proguardTask)
                 }
 
                 //create the task graph as the following -
                 //copy -> prepareProguard -> createProguardConfig -> proguard
                 proguardTask.dependsOn prepareProguardMultiLib
                 prepareProguardMultiLib.dependsOn copy
+            } else {
+                project.logger.warn("could not configure the tasks! proguardConfigs size is ${proguardConfigs.size()}")
             }
+        } else {
+            project.logger.warn("could not configure the tasks! collectedData size is ${collectedData.size()}")
         }
+
     }
 
     void createProjectExtension(Project project) {
