@@ -7,10 +7,15 @@ buildscript {
 apply plugin: 'groovy'
 apply plugin: 'maven'
 apply plugin: 'maven-publish'
-
+apply plugin: 'signing'
 
 sourceCompatibility = 1.7
 targetCompatibility = 1.7
+
+java {
+    withJavadocJar()
+    withSourcesJar()
+}
 
 repositories {
     mavenCentral()
@@ -36,6 +41,14 @@ publishing {
                 password = project.findProperty("gpr.key") ?: System.getenv("TOKEN")
             }
         }
+        maven {
+            name = "MavenCentralStaging"
+            url = uri("https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/")
+            credentials {
+                username = project.findProperty("ossrhUsername") ?: System.getenv("SONATYPE_USER")
+                password = project.findProperty("ossrhPassword") ?: System.getenv("SONATYPE_PASSWORD")
+            }
+        }
     }
     publications {
         PluginPublisher(MavenPublication) {
@@ -43,6 +56,37 @@ publishing {
             artifactId project['name']
             version project['version']
             from components.java
+            pom {
+                name = 'A Gradle plugin which automates the procedures required to apply proguard to multiple android library projects'
+                description = 'A concise description of my library'
+                url = 'https://github.com/sagiantebi/android-multilib-proguard'
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'http://www.opensource.org/licenses/mit-license.php'
+                    }
+                }
+                developers {
+                    developer {
+                        id = 'sagiantebi'
+                        name = 'Sagi Antebi'
+                        email = 'sagiantebi@gmail.com'
+                    }
+                }
+                scm {
+                    connection = 'scm:git:git://github.com/sagiantebi/android-multilib-proguard.git'
+                    developerConnection = 'scm:git:ssh://github.com:sagiantebi/android-multilib-proguard.git'
+                    url = 'https://github.com/sagiantebi/android-multilib-proguard'
+                }
+            }
         }
     }
+}
+
+signing {
+    def signingKeyId = findProperty("signingKeyId")
+    def signingKey = findProperty("signingKey")
+    def signingPassword = findProperty("signingPassword")
+    useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
+    sign publishing.publications.PluginPublisher
 }

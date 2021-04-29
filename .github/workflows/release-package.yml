@@ -25,7 +25,15 @@ jobs:
       # The USERNAME and TOKEN need to correspond to the credentials environment variables used in
       # the publishing section of your build.gradle
       - name: Publish to GitHub Packages
-        run: ./gradlew publish
+        run: ./gradlew publishPluginPublisherPublicationToGitHubPackagesRepository
         env:
           USERNAME: ${{ github.actor }}
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish to Maven Central
+        run: ./gradlew publishPluginPublisherPublicationToMavenCentralStagingRepository
+        env:
+          ORG_GRADLE_PROJECT_signingKeyId: ${{ secrets.ORG_GRADLE_PROJECT_SIGNINGKEYID }}
+          ORG_GRADLE_PROJECT_signingKey: ${{ secrets.ORG_GRADLE_PROJECT_SIGNINGKEY }}
+          ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.ORG_GRADLE_PROJECT_SIGNINGPASSWORD }}
+          SONATYPE_USER: ${{ secrets.SONATYPE_PASS }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_UN }}
