@@ -38,5 +38,5 @@ jobs:
           ORG_GRADLE_PROJECT_signingKeyId: ${{ secrets.ORG_GRADLE_PROJECT_SIGNINGKEYID }}
           ORG_GRADLE_PROJECT_signingKey: ${{ secrets.ORG_GRADLE_PROJECT_SIGNINGKEY }}
           ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.ORG_GRADLE_PROJECT_SIGNINGPASSWORD }}
-          SONATYPE_USER: ${{ secrets.SONATYPE_PASS }}
-          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_UN }}
+          SONATYPE_USER: ${{ secrets.SONATYPE_UN }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASS }}
